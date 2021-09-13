@@ -2,15 +2,20 @@
 #include "stb_image_write.h"
 #include "vec3.h"
 #include "colour.h"
+#include "ray.h"
 
 using namespace std;
 
-const int image_width = 256;
-const int image_height = 256;
-const int comps = 3; //3 for RGB, 4 for RGBA
+// Image
+const auto aspect_ratio = 16.0 / 9.0;
+const int image_width = 400;
+const int image_height = static_cast<int>(image_width / aspect_ratio);
+const int comps = 3;
 
-int pixel_index(int x, int y) {
-    return (image_height-y-1)*image_width*comps+x*comps;
+colour ray_colour(const ray& r) {
+    vec3 unit_direction = unit_vector(r.direction());
+    double t = 0.5*(unit_direction.y() + 1.0);
+    return (1.0-t)*colour(1.0, 1.0, 1.0) + t*colour(0.5, 0.7, 1.0);
 }
 
 int main() {
@@ -18,13 +23,27 @@ int main() {
     const string image_name = "image.png";
     unsigned char img_rgb[image_width*image_height*comps];
 
-    // Render
-    for (int j = image_height-1; j >= 0; --j) {
-        cout << "\rScanlines remaining: " << j << ' ' << std::flush;
-        for (int i = 0; i < image_width; ++i) {
-            colour pixel_colour(double(i)/(image_width-1), double(j)/(image_height-1), 0.25);
+    // Camera
+    double viewport_height = 2.0;
+    double viewport_width = aspect_ratio * viewport_height;
+    double focal_length = 1.0;
 
-            unsigned char* pixel_ptr = &img_rgb[pixel_index(i, j)];
+    point3 origin = point3(0, 0, 0);
+    vec3 horizontal = vec3(viewport_width, 0, 0);
+    vec3 vertical = vec3(0, viewport_height, 0);
+    vec3 lower_left_corner = origin - horizontal/2 - vertical/2 - vec3(0, 0, focal_length);
+
+
+    // Render
+    for (int y = image_height-1; y >= 0; --y) {
+        cout << "\rScanlines remaining: " << y << ' ' << std::flush;
+        for (int x = 0; x < image_width; ++x) {
+            auto u = double(x) / (image_width-1);
+            auto v = double(y) / (image_height-1);
+            ray r(origin, lower_left_corner + u*horizontal + v*vertical - origin);
+            colour pixel_colour = ray_colour(r);
+
+            unsigned char* pixel_ptr = &img_rgb[(image_height-y-1)*image_width*comps+x*comps];
             write_colour(pixel_ptr, pixel_colour);
         }
     }
@@ -34,7 +53,7 @@ int main() {
                                   image_height,
                                   3,
                                   img_rgb,
-                                  sizeof(img_rgb)/image_height);
+                                  static_cast<int>(sizeof(img_rgb)/image_height));
     if(!success) {
         cout << "Something went wrong" << endl;
     } else {
